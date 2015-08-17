@@ -2,12 +2,14 @@
 name = "dhcp_parser"
 version = "0.1.0"
 authors = ["Paul Woolcock <paul@woolcock.us>"]
+repository = "https://github.com/pwoolcoc/dhcp_parser"
+description = """
+DHCP parser using nom
+"""
+license = "MIT"
 
 [dependencies]
 nom = "*"
-
-[dependencies.enum_primitive]
-git = "https://github.com/pwoolcoc/enum_primitive-rs"
 
 [dependencies.num]
 version = "*"

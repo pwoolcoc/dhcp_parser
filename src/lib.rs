@@ -1,16 +1,18 @@
 #![feature(ip_addr)]
 
-#[macro_use] extern crate enum_primitive;
+/// DHCP Parsing
+///
+/// Takes bytes and turns them into Rust datatypes
+
 #[macro_use] extern crate nom;
 extern crate num;
 
-mod op;
 mod htype;
+mod op;
 mod options;
+mod util;
 
-use std::str;
 use std::fmt;
-use std::borrow::{ToOwned};
 use std::error;
 use std::convert::{From};
 use std::net::{IpAddr, Ipv4Addr};
@@ -18,12 +20,10 @@ use nom::{IResult, be_u8, be_u16, be_u32};
 
 use self::op::Op;
 use self::htype::Htype;
+use self::util::{take_rest};
+use self::options::{DhcpOption};
 
 const MAGIC_COOKIE: [u8; 4] = [99, 130, 83, 99];
-
-fn take_rest(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    IResult::Done(b"", input)
-}
 
 #[derive(Debug, Clone)]
 pub enum Error {
@@ -53,7 +53,15 @@ impl error::Error for Error {
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 #[derive(Debug, PartialEq)]
-pub struct Message<'a> {
+/// Data type that the bytes get translated into.
+///
+/// In some cases I translated them into more specific data types
+/// where possible. I would like to make `sname` and `file` into
+/// `&'a str`, but it is possible that they will hold more `options`
+/// instead of actually being strings, so I have to keep them as
+/// bytes in RawMessage. Something using this should probably change
+/// them to `Option<String>`s in a higher-level datatype.
+pub struct RawMessage<'a> {
     op: Op,
     htype: Htype,
     hlen: u8,
@@ -65,25 +73,14 @@ pub struct Message<'a> {
     yiaddr: IpAddr,
     siaddr: IpAddr,
     giaddr: IpAddr,
-    chaddr: Vec<u8>,  // 16 bytes
-    sname: &'a str,  // 64 bytes
-    file: &'a str,  // 128 bytes
-    options: Option<Vec<u8>>,
-}
-
-fn null_terminated_slice_to_string(bytes: &[u8]) -> Result<&str> {
-    let pos = match bytes.iter().position(|b| *b == 0u8) {
-        Some(p) => p,
-        None => return Err(Error::ParseError("NO NULL TERMINATION FOUND".into())),
-    };
-    match str::from_utf8(&bytes[0..pos]) {
-        Ok(s) => Ok(s),
-        Err(_) => Err(Error::ParseError("Could not get utf8 from bytes".into())),
-    }
+    chaddr: &'a [u8],  // 16 bytes
+    sname: &'a [u8],  // 64 bytes
+    file: &'a [u8],  // 128 bytes
+    options: Vec<DhcpOption>,
 }
 
 #[allow(dead_code)]
-fn parse_message<'a>(bytes: &'a [u8]) -> Result<Message<'a>> {
+fn parse_message<'a>(bytes: &'a [u8]) -> Result<RawMessage<'a>> {
     match _parse_message(bytes) {
         IResult::Done(inp, msg) => {
             if inp.len() > 0 {
@@ -100,7 +97,7 @@ fn parse_message<'a>(bytes: &'a [u8]) -> Result<Message<'a>> {
     }
 }
 
-named!(_parse_message(&'a [u8]) -> Message<'a>,
+named!(_parse_message(&'a [u8]) -> RawMessage<'a>,
     chain!(
         pop: map_res!(be_u8, Op::from_byte) ~
         phtype: map_res!(be_u8, Htype::from_byte) ~
@@ -109,17 +106,17 @@ named!(_parse_message(&'a [u8]) -> Message<'a>,
         pxid: be_u32 ~
         psecs: be_u16 ~
         pflags: be_u16 ~
-        pciaddr: be_u32 ~
-        pyiaddr: be_u32 ~
-        psiaddr: be_u32 ~
-        pgiaddr: be_u32 ~
+        pciaddr: map!(be_u32, |a| IpAddr::V4(Ipv4Addr::from(a))) ~
+        pyiaddr: map!(be_u32, |a| IpAddr::V4(Ipv4Addr::from(a))) ~
+        psiaddr: map!(be_u32, |a| IpAddr::V4(Ipv4Addr::from(a))) ~
+        pgiaddr: map!(be_u32, |a| IpAddr::V4(Ipv4Addr::from(a))) ~
         pchaddr: take!(16) ~
-        psname: map_res!(take!(64), null_terminated_slice_to_string) ~
-        pfile: map_res!(take!(128), null_terminated_slice_to_string) ~
+        psname: take!(64) ~
+        pfile: take!(128) ~
         _cookie: tag!(&MAGIC_COOKIE) ~
-        poptions: take_rest,
+        poptions: map_res!(take_rest, options::parse),
     ||{
-        Message {
+        RawMessage {
             op: pop,
             htype: phtype,
             hlen: phlen,
@@ -127,14 +124,14 @@ named!(_parse_message(&'a [u8]) -> Message<'a>,
             xid: pxid,
             secs: psecs,
             flags: pflags,
-            ciaddr: IpAddr::V4(Ipv4Addr::from(pciaddr)),
-            yiaddr: IpAddr::V4(Ipv4Addr::from(pyiaddr)),
-            siaddr: IpAddr::V4(Ipv4Addr::from(psiaddr)),
-            giaddr: IpAddr::V4(Ipv4Addr::from(pgiaddr)),
-            chaddr: pchaddr.to_owned(),
+            ciaddr: pciaddr,
+            yiaddr: pyiaddr,
+            siaddr: psiaddr,
+            giaddr: pgiaddr,
+            chaddr: pchaddr,
             sname: psname,
             file: pfile,
-            options: Some(poptions.to_owned()),
+            options: poptions,
         }
     }
     )
@@ -144,24 +141,9 @@ named!(_parse_message(&'a [u8]) -> Message<'a>,
 mod tests {
 
     use std::str;
-    use nom::IResult;
-    use super::{take_rest, parse_message, Message};
+    use super::{parse_message, RawMessage};
     use super::op::{Op};
     use super::htype::{Htype};
-
-#[test]
-fn test_take_rest() {
-    named!(parts<&[u8],(&str,&str)>,
-        chain!(
-            key: map_res!(tag!("abcd"), str::from_utf8) ~
-            tag!(":") ~
-            value: map_res!(take_rest, str::from_utf8),
-            || {(key, value)}
-        )
-    );
-
-    assert_eq!(parts(b"abcd:thisistherestofthestring"), IResult::Done(&b""[..], ("abcd", "thisistherestofthestring")));
-}
 
 #[test]
 fn test_parse_message() {
@@ -189,7 +171,7 @@ fn test_parse_message() {
         77, 78, 79, 80, 81, 82, 83, 84,
         85, 86, 87, 88, 89, 90, 91, 92,
         93, 94, 95, 96, 97, 98, 99, 100,
-        101, 102, 103, 104, 105, 106, 107, 0,   // sname
+        101, 102, 103, 104, 105, 106, 107, 0,   // sname: "-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijk",
 
         109, 110, 111, 112, 113, 114, 115, 116,
         117, 118, 119, 120, 121, 122, 123, 124,
@@ -209,11 +191,11 @@ fn test_parse_message() {
         120, 121, 122, 123, 124, 125, 109, 110,
         111, 112, 113, 114, 115, 116, 117, 118,
         119, 120, 121, 122, 123, 124, 125, 109,
-        0, 0, 0, 0, 0, 0, 0, 0,                 // file
+        0, 0, 0, 0, 0, 0, 0, 0,                 // file: "mnopqrstuvwxyz{|}mnopqrstuvwxyz{|}mnopqrstuvwxyz{|}mnopqrstuvwxyz{|}mnopqrstuvwxyz{|}mnopqrstuvwxyz{|}mnopqrstuvwxyz{|}m",
 
         99, 130, 83, 99,                        // magic cookie
     ];
-    assert_eq!(parse_message(&test_message).unwrap(), Message {
+    assert_eq!(parse_message(&test_message).unwrap(), RawMessage {
         op: Op::BootRequest,
         htype: Htype::Experimental_Ethernet_3mb,
         hlen: 3,
@@ -225,10 +207,40 @@ fn test_parse_message() {
         yiaddr: str::FromStr::from_str("17.18.19.20").unwrap(),
         siaddr: str::FromStr::from_str("21.22.23.24").unwrap(),
         giaddr: str::FromStr::from_str("25.26.27.28").unwrap(),
-        chaddr: vec![29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44],
-        sname: "-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijk",
-        file: "mnopqrstuvwxyz{|}mnopqrstuvwxyz{|}mnopqrstuvwxyz{|}mnopqrstuvwxyz{|}mnopqrstuvwxyz{|}mnopqrstuvwxyz{|}mnopqrstuvwxyz{|}m",
-        options: Some(vec![])
+        chaddr: &vec![29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44][..],
+        sname: &vec![
+            45, 46, 47, 48, 49, 50, 51, 52,
+            53, 54, 55, 56, 57, 58, 59, 60,
+            61, 62, 63, 64, 65, 66, 67, 68,
+            69, 70, 71, 72, 73, 74, 75, 76,
+
+            77, 78, 79, 80, 81, 82, 83, 84,
+            85, 86, 87, 88, 89, 90, 91, 92,
+            93, 94, 95, 96, 97, 98, 99, 100,
+            101, 102, 103, 104, 105, 106, 107, 0,
+        ][..],
+        file: &vec![
+            109, 110, 111, 112, 113, 114, 115, 116,
+            117, 118, 119, 120, 121, 122, 123, 124,
+            125, 109, 110, 111, 112, 113, 114, 115,
+            116, 117, 118, 119, 120, 121, 122, 123,
+
+            124, 125, 109, 110, 111, 112, 113, 114,
+            115, 116, 117, 118, 119, 120, 121, 122,
+            123, 124, 125, 109, 110, 111, 112, 113,
+            114, 115, 116, 117, 118, 119, 120, 121,
+
+            122, 123, 124, 125, 109, 110, 111, 112,
+            113, 114, 115, 116, 117, 118, 119, 120,
+            121, 122, 123, 124, 125, 109, 110, 111,
+            112, 113, 114, 115, 116, 117, 118, 119,
+
+            120, 121, 122, 123, 124, 125, 109, 110,
+            111, 112, 113, 114, 115, 116, 117, 118,
+            119, 120, 121, 122, 123, 124, 125, 109,
+            0, 0, 0, 0, 0, 0, 0, 0,
+        ][..],
+        options: &vec![][..],
     });
 
 }
