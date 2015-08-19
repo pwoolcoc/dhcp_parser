@@ -1,3 +1,4 @@
+#![feature(trace_macros)]
 #![feature(ip_addr)]
 
 /// DHCP Parsing
