@@ -6,6 +6,7 @@ pub fn take_rest(input: &[u8]) -> IResult<&[u8], &[u8]> {
     IResult::Done(b"", input)
 }
 
+#[allow(dead_code)]
 pub fn null_terminated_slice_to_string(bytes: &[u8]) -> Result<&str> {
     let pos = match bytes.iter().position(|b| *b == 0u8) {
         Some(p) => p,

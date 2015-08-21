@@ -3,9 +3,11 @@ mod parse;
 use std::net::{IpAddr};
 pub use self::parse::parse;
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 pub enum DhcpOption {
     Pad,
+    End,
     SubnetMask(IpAddr),
     TimeOffset(i32),
     Router(Vec<IpAddr>),
@@ -25,12 +27,14 @@ pub enum DhcpOption {
     RootPath(String),
     ExtensionsPath(String),
     IPForwarding(bool),
+
     NonLocalSourceRouting(bool),
     PolicyFilter(Vec<(IpAddr, u32)>),
-    MaxDatagramReassemblySize,
-    DefaultIPTTL,
-    PathMTUAgingTimeout,
+    MaxDatagramReassemblySize(u16),
+    DefaultIPTTL(u8),
+    PathMTUAgingTimeout(u32),
     PathMTUPlateauTable,
+
     InterfaceMTU,
     AllSubnetsAreLocal,
     BroadcastAddress,
@@ -39,12 +43,15 @@ pub enum DhcpOption {
     PerformRouterDiscovery,
     RouterSolicitationAddress,
     StaticRoute,
+
     TrailerEncapsulation,
     ARPCacheTimeout,
     EthernetEncapsulation,
+
     TCPDefaultTTL,
     TCPKeepaliveInterval,
     TCPKeepaliveGarbage,
+
     NISDomain,
     NetworkInformationServers,
     NTPServers,
@@ -55,6 +62,7 @@ pub enum DhcpOption {
     NetBIOSScope,
     XFontServer,
     XDisplayManager,
+
     // DHCP-specific options
     RequestedIPAddress,
     IPAddressLeaseTime,
@@ -68,7 +76,6 @@ pub enum DhcpOption {
     RebindingTimeValue,
     ClassIdentifier,
     ClientIdentifier,
-    End,
 }
 
 //impl DhcpOption {
