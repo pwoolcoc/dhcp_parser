@@ -16,7 +16,7 @@ pub enum DhcpOption {
     DomainNameServer(Vec<IpAddr>),
     LogServer(Vec<IpAddr>),
     CookieServer(Vec<IpAddr>),
-    LPRServer(Vec<IpAddr>),
+    LprServer(Vec<IpAddr>),
     ImpressServer(Vec<IpAddr>),
     ResourceLocationServer(Vec<IpAddr>),
     HostName(String),
@@ -31,51 +31,83 @@ pub enum DhcpOption {
     NonLocalSourceRouting(bool),
     PolicyFilter(Vec<(IpAddr, IpAddr)>),
     MaxDatagramReassemblySize(u16),
-    DefaultIPTTL(u8),
-    PathMTUAgingTimeout(u32),
-    PathMTUPlateauTable(Vec<u16>),
+    DefaultIpTtl(u8),
+    PathMtuAgingTimeout(u32),
+    PathMtuPlateauTable(Vec<u16>),
 
-    InterfaceMTU,
-    AllSubnetsAreLocal,
-    BroadcastAddress,
-    PerformMaskDiscovery,
-    MaskSupplier,
-    PerformRouterDiscovery,
-    RouterSolicitationAddress,
-    StaticRoute,
+    InterfaceMtu(u16),
+    AllSubnetsAreLocal(bool),
+    BroadcastAddress(IpAddr),
+    PerformMaskDiscovery(bool),
+    MaskSupplier(bool),
+    PerformRouterDiscovery(bool),
+    RouterSolicitationAddress(IpAddr),
+    StaticRoute(Vec<(IpAddr, IpAddr)>),
 
-    TrailerEncapsulation,
-    ARPCacheTimeout,
-    EthernetEncapsulation,
+    TrailerEncapsulation(bool),
+    ArpCacheTimeout(u32),
+    EthernetEncapsulation(bool),
 
-    TCPDefaultTTL,
-    TCPKeepaliveInterval,
-    TCPKeepaliveGarbage,
+    TcpDefaultTtl(u8),
+    TcpKeepaliveInterval(u32),
+    TcpKeepaliveGarbage(bool),
 
-    NISDomain,
-    NetworkInformationServers,
-    NTPServers,
-    VendorExtensions,
-    NetBIOSNameServers,
-    NetBIOSDatagramDistributionServer,
-    NetBIOSNodeType,
-    NetBIOSScope,
-    XFontServer,
-    XDisplayManager,
+    NisDomain(String),
+    NetworkInformationServers(Vec<IpAddr>),
+    NtpServers(Vec<IpAddr>),
+    VendorExtensions(Vec<u8>),
+    NetBiosNameServers(Vec<IpAddr>),
+    NetBiosDatagramDistributionServer(Vec<IpAddr>),
+    NetBiosNodeType(NodeType),
+    NetBiosScope(String),
+    XFontServer(Vec<IpAddr>),
+    XDisplayManager(Vec<IpAddr>),
 
     // DHCP-specific options
-    RequestedIPAddress,
-    IPAddressLeaseTime,
-    OptionOverload,
-    MessageType,
-    ServerIdentifier,
-    ParamRequestList,
-    Message,
-    MaxMessageSize,
-    RenewalTimeValue,
-    RebindingTimeValue,
+    RequestedIpAddress(IpAddr),
+    IpAddressLeaseTime(u32),
+    OptionOverload(OptionOverloadType),
+    MessageType(DhcpMessageTypes),
+    ServerIdentifier(IpAddr),
+    ParamRequestList(Vec<u8>),
+    Message(String),
+    MaxMessageSize(u16),
+    RenewalTimeValue(u32),
+    RebindingTimeValue(u32),
     ClassIdentifier,
     ClientIdentifier,
+}
+
+enum_from_primitive! {
+#[derive(Debug, PartialEq)]
+enum NodeType {
+    B = 1,
+    P = 2,
+    M = 4,
+    H = 8,
+}
+}
+
+enum_from_primitive! {
+#[derive(Debug, PartialEq)]
+enum OptionOverloadType {
+    File = 1,
+    Sname = 2,
+    FileAndSname = 3,
+}
+}
+
+enum_from_primitive! {
+#[derive(Debug, PartialEq)]
+enum DhcpMessageTypes {
+    Discover = 1,
+    Offer = 2,
+    Request = 3,
+    Decline = 4,
+    Ack = 5,
+    Nak = 6,
+    Release = 7,
+}
 }
 
 //impl DhcpOption {

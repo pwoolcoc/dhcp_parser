@@ -10,8 +10,11 @@ license = "MIT"
 
 [dependencies]
 nom = "*"
+enum_primitive = "*"
 
 [dependencies.num]
 version = "*"
 default-features = false
 
+[dependencies.rest_easy]
+path = "../rest_easy"

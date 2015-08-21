@@ -1,11 +1,15 @@
 #![feature(trace_macros)]
 #![feature(ip_addr)]
+#![feature(plugin)]
+
+#[plugin] #[no_link] extern crate rest_easy;
 
 /// DHCP Parsing
 ///
 /// Takes bytes and turns them into Rust datatypes
 
 #[macro_use] extern crate nom;
+#[macro_use] extern crate enum_primitive;
 extern crate num;
 
 mod htype;
