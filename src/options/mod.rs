@@ -29,11 +29,11 @@ pub enum DhcpOption {
     IPForwarding(bool),
 
     NonLocalSourceRouting(bool),
-    PolicyFilter(Vec<(IpAddr, u32)>),
+    PolicyFilter(Vec<(IpAddr, IpAddr)>),
     MaxDatagramReassemblySize(u16),
     DefaultIPTTL(u8),
     PathMTUAgingTimeout(u32),
-    PathMTUPlateauTable,
+    PathMTUPlateauTable(Vec<u16>),
 
     InterfaceMTU,
     AllSubnetsAreLocal,

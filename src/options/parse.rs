@@ -15,7 +15,7 @@ fn many_ip_addrs(addrs: Vec<u32>) -> Vec<IpAddr> {
     addrs.into_iter().map(|a| IpAddr::V4(Ipv4Addr::from(a))).collect()
 }
 
-fn ip_addr_mask_pairs(bytes: &[u8]) -> Vec<(IpAddr, u32)> {
+fn ip_addr_mask_pairs(bytes: &[u8]) -> Vec<(IpAddr, IpAddr)> {
     vec![]
     /* let it = bytes.iter(); */
     /* let mut pairs: Vec<(u32, u32)> = vec![]; */
@@ -27,16 +27,19 @@ fn ip_addr_mask_pairs(bytes: &[u8]) -> Vec<(IpAddr, u32)> {
     /* }) */
 }
 
-macro_rules! dhcp_option_base_parser(
-    ($name:ident, $tag:expr, $rest:tt) => (
-        named!(pub $name<&[u8], DhcpOption>,
-            chain!(
-                tag!([$tag]) ~
-                $rest
-            )
-        );
-    )
-);
+fn num_u16s(bytes: &[u8]) -> IResult<&[u8], u8> {
+    match be_u8(bytes) {
+        IResult::Done(i, o) => IResult::Done(i, o / 2),
+        a => a,
+    }
+}
+
+fn num_u32s(bytes: &[u8]) -> IResult<&[u8], u8> {
+    match be_u8(bytes) {
+        IResult::Done(i, o) => IResult::Done(i, o / 4),
+        a => a,
+    }
+}
 
 /// A macro for the options that take the form
 ///
@@ -49,14 +52,7 @@ macro_rules! many_ips(
         named!(pub $name<&[u8], DhcpOption>,
             chain!(
                 tag!([$tag]) ~
-                addrs: length_value!(|x| {
-                    match be_u8(x) {
-                        IResult::Done(o, i) => {
-                            IResult::Done(o, i / 4)
-                        },
-                        y => y
-                    }
-                }, be_u32),
+                addrs: length_value!(num_u32s, be_u32),
                 || { $variant(many_ip_addrs(addrs)) }
             )
         );
@@ -168,6 +164,32 @@ named!(pub max_datagram_reassembly_size<&[u8], DhcpOption>,
     )
 );
 
+named!(default_ip_ttl<&[u8], DhcpOption>,
+    chain!(
+        tag!([23u8]) ~
+        _length: be_u8 ~
+        ttl: be_u8,
+        || { DefaultIPTTL(ttl) }
+    )
+);
+
+named!(path_mtu_aging_timeout<&[u8], DhcpOption>,
+    chain!(
+        tag!([24u8]) ~
+        _length: be_u8 ~
+        timeout: be_u32,
+        || { PathMTUAgingTimeout(timeout) }
+    )
+);
+
+named!(path_mtu_plateau_table<&[u8], DhcpOption>,
+    chain!(
+        tag!([25u8]) ~
+        sizes: length_value!(num_u16s, be_u16),
+        || { PathMTUPlateauTable(sizes) }
+    )
+);
+
 // Start collections of parsers, to get around the fact that alt! exceeds the
 // recursion once you get to ~21 parsers
 
@@ -205,9 +227,9 @@ named!(ip_layer_parameters_per_host<&[u8], DhcpOption>, alt!(
         | non_source_local_routing      // 20
         | policy_filter //TODO
         | max_datagram_reassembly_size
-//      | default_ip_ttl
-//      | path_mtu_aging_timeout
-//      | path_mtu_plateau_table        // 25
+        | default_ip_ttl
+        | path_mtu_aging_timeout
+        | path_mtu_plateau_table        // 25
     )
 );
 
