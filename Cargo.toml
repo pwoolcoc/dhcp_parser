@@ -9,12 +9,9 @@ DHCP parser using nom
 license = "MIT"
 
 [dependencies]
-nom = "*"
-enum_primitive = "*"
+nom = "0.3"
+enum_primitive = "0.1"
 
 [dependencies.num]
-version = "*"
+version = "0.1"
 default-features = false
-
-[dependencies.rest_easy]
-path = "../rest_easy"
