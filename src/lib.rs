@@ -1,9 +1,3 @@
-#![feature(trace_macros)]
-#![feature(ip_addr)]
-#![feature(plugin)]
-
-#[plugin] #[no_link] extern crate rest_easy;
-
 /// DHCP Parsing
 ///
 /// Takes bytes and turns them into Rust datatypes
@@ -84,8 +78,7 @@ pub struct RawMessage<'a> {
     options: Vec<DhcpOption>,
 }
 
-#[allow(dead_code)]
-fn parse_message<'a>(bytes: &'a [u8]) -> Result<RawMessage<'a>> {
+pub fn parse_message<'a>(bytes: &'a [u8]) -> Result<RawMessage<'a>> {
     match _parse_message(bytes) {
         IResult::Done(inp, msg) => {
             if inp.len() > 0 {
